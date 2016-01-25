@@ -1,7 +1,7 @@
 // Copyright (C) 2014 JT Olds
 // See LICENSE for copying information
 
-package oauth2http
+package oauth2
 
 import (
 	"golang.org/x/oauth2"
@@ -11,44 +11,46 @@ import (
 	"golang.org/x/oauth2/linkedin"
 )
 
+type Config oauth2.Config
+
 // Provider is a named *oauth2.Config
 type Provider struct {
 	Name string
 	oauth2.Config
 }
 
-func Github(conf oauth2.Config) *Provider {
+func Github(conf Config) *Provider {
 	if conf.Endpoint.AuthURL == "" {
 		conf.Endpoint = github.Endpoint
 	}
 	return &Provider{
 		Name:   "github",
-		Config: conf}
+		Config: oauth2.Config(conf)}
 }
 
-func Google(conf oauth2.Config) *Provider {
+func Google(conf Config) *Provider {
 	if conf.Endpoint.AuthURL == "" {
 		conf.Endpoint = google.Endpoint
 	}
 	return &Provider{
 		Name:   "google",
-		Config: conf}
+		Config: oauth2.Config(conf)}
 }
 
-func Facebook(conf oauth2.Config) *Provider {
+func Facebook(conf Config) *Provider {
 	if conf.Endpoint.AuthURL == "" {
 		conf.Endpoint = facebook.Endpoint
 	}
 	return &Provider{
 		Name:   "facebook",
-		Config: conf}
+		Config: oauth2.Config(conf)}
 }
 
-func LinkedIn(conf oauth2.Config) *Provider {
+func LinkedIn(conf Config) *Provider {
 	if conf.Endpoint.AuthURL == "" {
 		conf.Endpoint = linkedin.Endpoint
 	}
 	return &Provider{
 		Name:   "linkedin",
-		Config: conf}
+		Config: oauth2.Config(conf)}
 }

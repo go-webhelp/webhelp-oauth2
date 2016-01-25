@@ -1,7 +1,7 @@
 // Copyright (C) 2014 JT Olds
 // See LICENSE for copying information
 
-package oauth2http
+package oauth2
 
 import (
 	"fmt"
@@ -9,9 +9,9 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/gorilla/sessions"
-	"github.com/jtolds/go-oauth2http/utils"
+	"github.com/jtolds/webhelp"
 	"github.com/spacemonkeygo/errors"
+	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 )
 
@@ -39,18 +39,17 @@ import (
 // URL generator.
 type ProviderGroup struct {
 	handlers       map[string]*ProviderHandler
-	mux            utils.DirMux
+	mux            webhelp.DirMux
 	urls           RedirectURLs
 	group_base_url string
 }
 
-// NewProviderGroup makes a provider group. Requires a configured Gorilla
-// session store, a session namespace (will be prepended to ":"+provider_name),
-// the base URL of the ProviderGroup's http.Handler, a collection of
-// URLs for redirecting, and a list of specific configured providers.
-func NewProviderGroup(store sessions.Store, session_namespace string,
-	group_base_url string, urls RedirectURLs,
-	providers ...*Provider) (*ProviderGroup, error) {
+// NewProviderGroup makes a provider group. Requires a session namespace (will
+// be prepended to ":"+provider_name), the base URL of the ProviderGroup's
+// http.Handler, a collection of URLs for redirecting, and a list of specific
+// configured providers.
+func NewProviderGroup(session_namespace string, group_base_url string,
+	urls RedirectURLs, providers ...*Provider) (*ProviderGroup, error) {
 
 	group_base_url = strings.TrimRight(group_base_url, "/")
 
@@ -59,9 +58,9 @@ func NewProviderGroup(store sessions.Store, session_namespace string,
 		urls:           urls,
 		group_base_url: group_base_url}
 
-	g.mux = utils.DirMux{
-		"all": utils.DirMux{"logout": utils.ExactGetHandler(
-			http.HandlerFunc(g.logoutAll))},
+	g.mux = webhelp.DirMux{
+		"all": webhelp.DirMux{"logout": webhelp.Exact(
+			webhelp.HandlerFunc(g.logoutAll))},
 	}
 
 	for _, provider := range providers {
@@ -74,9 +73,8 @@ func NewProviderGroup(store sessions.Store, session_namespace string,
 				provider.Name)
 		}
 		handler := NewProviderHandler(provider,
-			SessionFromStore(store, fmt.Sprintf("%s-%s", session_namespace,
-				provider.Name)), fmt.Sprintf("%s/%s", group_base_url, provider.Name),
-			urls)
+			fmt.Sprintf("%s-%s", session_namespace, provider.Name),
+			fmt.Sprintf("%s/%s", group_base_url, provider.Name), urls)
 		g.handlers[provider.Name] = handler
 		g.mux[provider.Name] = handler
 	}
@@ -84,9 +82,10 @@ func NewProviderGroup(store sessions.Store, session_namespace string,
 	return g, nil
 }
 
-// ServeHTTP implements http.Handler
-func (g *ProviderGroup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	g.mux.ServeHTTP(w, r)
+// HandleHTTP implements webhelp.Handler
+func (g *ProviderGroup) HandleHTTP(ctx context.Context,
+	w webhelp.ResponseWriter, r *http.Request) error {
+	return g.mux.HandleHTTP(ctx, w, r)
 }
 
 // Handler returns a specific ProviderHandler given the Provider name
@@ -119,12 +118,12 @@ func (g *ProviderGroup) LogoutAllURL(redirect_to string) string {
 }
 
 // Tokens will return a map of all the currently valid OAuth2 tokens
-func (g *ProviderGroup) Tokens(r *http.Request) (map[string]*oauth2.Token,
+func (g *ProviderGroup) Tokens(ctx context.Context) (map[string]*oauth2.Token,
 	error) {
 	rv := make(map[string]*oauth2.Token)
 	var errs errors.ErrorGroup
 	for name, handler := range g.handlers {
-		token, err := handler.Token(r)
+		token, err := handler.Token(ctx)
 		errs.Add(err)
 		if err == nil && token != nil {
 			rv[name] = token
@@ -143,8 +142,8 @@ func (g *ProviderGroup) Providers() map[string]*ProviderHandler {
 }
 
 // LoggedIn returns true if the user is logged in with any provider
-func (g *ProviderGroup) LoggedIn(r *http.Request) (bool, error) {
-	t, err := g.Tokens(r)
+func (g *ProviderGroup) LoggedIn(ctx context.Context) (bool, error) {
+	t, err := g.Tokens(ctx)
 	return len(t) > 0, err
 }
 
@@ -152,25 +151,26 @@ func (g *ProviderGroup) LoggedIn(r *http.Request) (bool, error) {
 // response for logging a user out completely from all providers. If a user
 // should log out of just a specific OAuth2 provider, use the Logout method
 // on the associated ProviderHandler.
-func (g *ProviderGroup) LogoutAll(w http.ResponseWriter, r *http.Request) error {
+func (g *ProviderGroup) LogoutAll(ctx context.Context,
+	w webhelp.ResponseWriter) error {
 	var errs errors.ErrorGroup
 	for _, handler := range g.handlers {
-		errs.Add(handler.Logout(w, r))
+		errs.Add(handler.Logout(ctx, w))
 	}
 	return errs.Finalize()
 }
 
-func (g *ProviderGroup) logoutAll(w http.ResponseWriter, r *http.Request) {
-	err := g.LogoutAll(w, r)
+func (g *ProviderGroup) logoutAll(ctx context.Context,
+	w webhelp.ResponseWriter, r *http.Request) error {
+	err := g.LogoutAll(ctx, w)
 	if err != nil {
-		g.urls.handleError(w, r, 500, "session storage error", err)
-		return
+		return err
 	}
 	redirect_to := r.FormValue("redirect_to")
 	if redirect_to == "" {
 		redirect_to = g.urls.DefaultLogoutURL
 	}
-	http.Redirect(w, r, redirect_to, http.StatusSeeOther)
+	return webhelp.Redirect(w, r, redirect_to)
 }
 
 // LoginRequired is a middleware for redirecting users to a login page if
@@ -179,19 +179,18 @@ func (g *ProviderGroup) logoutAll(w http.ResponseWriter, r *http.Request) {
 // If you already know which provider a user should use, consider using
 // (*ProviderHandler).LoginRequired instead, which doesn't require a
 // login_redirect URL.
-func (g *ProviderGroup) LoginRequired(h http.Handler,
-	login_redirect func(redirect_to string) (url string)) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		tokens, err := g.Tokens(r)
+func (g *ProviderGroup) LoginRequired(h webhelp.Handler,
+	login_redirect func(redirect_to string) (url string)) webhelp.Handler {
+	return webhelp.HandlerFunc(func(ctx context.Context,
+		w webhelp.ResponseWriter, r *http.Request) error {
+		tokens, err := g.Tokens(ctx)
 		if err != nil {
-			g.urls.handleError(w, r, 500, "session storage error", err)
-			return
+			return err
 		}
 		if len(tokens) > 0 {
-			h.ServeHTTP(w, r)
+			return h.HandleHTTP(ctx, w, r)
 		} else {
-			http.Redirect(w, r, login_redirect(r.RequestURI),
-				http.StatusSeeOther)
+			return webhelp.Redirect(w, r, login_redirect(r.RequestURI))
 		}
 	})
 }

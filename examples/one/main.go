@@ -1,4 +1,4 @@
-// Copyright (C) 2014 JT Olds
+// Copyright (C) 2016 JT Olds
 // See LICENSE for copying information
 
 // This example shows how to set up a web service that allows users to log in
@@ -6,43 +6,36 @@
 package main
 
 import (
+	"encoding/hex"
 	"flag"
 	"fmt"
 	"net/http"
 
-	"github.com/gorilla/context"
-	"github.com/gorilla/sessions"
-	"github.com/jtolds/go-oauth2http"
-	"github.com/jtolds/go-oauth2http/utils"
-	"github.com/spacemonkeygo/flagfile"
-	"github.com/spacemonkeygo/spacelog"
-	"github.com/spacemonkeygo/spacelog/setup"
-	"golang.org/x/oauth2"
-	"gopkg.in/spacemonkeygo/monitor.v1"
+	"github.com/jtolds/webhelp"
+	"github.com/jtolds/webhelp-oauth2"
+	"github.com/jtolds/webhelp/sessions"
+	"golang.org/x/net/context"
 )
 
 var (
-	listenAddr = flag.String("addr", ":8080", "address to listen on")
-	debugAddr  = flag.String("debug_addr", "localhost:0",
-		"address to listen on for debugging")
-	publicAddr = flag.String("public_addr", "localhost:8080",
-		"public address for URLs")
-	cookieSecret = flag.String("cookie_secret", "secret",
+	listenAddr   = flag.String("addr", ":8080", "address to listen on")
+	cookieSecret = flag.String("cookie_secret", "abcdef0123456789",
 		"the secret for securing cookie information")
 
-	logger = spacelog.GetLogger()
+	githubClientId     = flag.String("github_client_id", "", "")
+	githubClientSecret = flag.String("github_client_secret", "", "")
 )
 
 type SampleHandler struct {
-	Prov       *oauth2http.ProviderHandler
+	Prov       *oauth2.ProviderHandler
 	Restricted bool
 }
 
-func (s *SampleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	t, err := s.Prov.Token(r)
+func (s *SampleHandler) HandleHTTP(ctx context.Context,
+	w webhelp.ResponseWriter, r *http.Request) error {
+	t, err := s.Prov.Token(ctx)
 	if err != nil {
-		http.Error(w, err.Error(), 500)
-		return
+		return err
 	}
 	w.Header().Set("Content-Type", "text/html")
 	if s.Restricted {
@@ -62,30 +55,31 @@ func (s *SampleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	    <p><a href="/restricted">Restricted</a></p>
     `)
 	}
+	return nil
 }
 
 func main() {
-	flagfile.Load()
-	setup.MustSetup("example")
-	monitor.RegisterEnvironment()
-	go http.ListenAndServe(*debugAddr, monitor.DefaultStore)
+	flag.Parse()
 
-	store := sessions.NewCookieStore([]byte(*cookieSecret))
+	secret, err := hex.DecodeString(*cookieSecret)
+	if err != nil {
+		panic(err)
+	}
+	store := sessions.NewCookieStore(secret)
 
-	oauth := oauth2http.NewProviderHandler(
-		oauth2http.Github(oauth2.Config{
-			ClientID:     "<client_id>",
-			ClientSecret: "<client_secret>"}),
-		oauth2http.SessionFromStore(store, "oauth-github"), "/auth",
-		oauth2http.RedirectURLs{})
+	oauth := oauth2.NewProviderHandler(
+		oauth2.Github(oauth2.Config{
+			ClientID:     *githubClientId,
+			ClientSecret: *githubClientSecret}),
+		"oauth-github", "/auth",
+		oauth2.RedirectURLs{})
 
-	logger.Notice("listening")
-
-	http.ListenAndServe(*listenAddr,
-		utils.LoggingHandler(context.ClearHandler(
-			utils.DirMux{
-				"": &SampleHandler{Prov: oauth, Restricted: false},
-				"restricted": oauth.LoginRequired(
-					&SampleHandler{Prov: oauth, Restricted: true}),
-				"auth": oauth})))
+	webhelp.ListenAndServe(*listenAddr,
+		webhelp.LoggingHandler(
+			sessions.HandlerWithStore(store,
+				webhelp.DirMux{
+					"": &SampleHandler{Prov: oauth, Restricted: false},
+					"restricted": oauth.LoginRequired(
+						&SampleHandler{Prov: oauth, Restricted: true}),
+					"auth": oauth})))
 }
