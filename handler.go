@@ -36,7 +36,7 @@ type ProviderHandler struct {
 	session_namespace string
 	handler_base_url  string
 	urls              RedirectURLs
-	webhelp.Handler
+	webhelp.DirMux
 }
 
 // NewProviderHandler makes a provider handler. Requires a provider
@@ -55,7 +55,7 @@ func NewProviderHandler(provider *Provider, session_namespace string,
 		session_namespace: session_namespace,
 		handler_base_url:  strings.TrimRight(handler_base_url, "/"),
 		urls:              urls}
-	h.Handler = webhelp.DirMux{
+	h.DirMux = webhelp.DirMux{
 		"login":  webhelp.Exact(webhelp.HandlerFunc(h.login)),
 		"logout": webhelp.Exact(webhelp.HandlerFunc(h.logout)),
 		"_cb":    webhelp.Exact(webhelp.HandlerFunc(h.cb))}
@@ -213,21 +213,36 @@ func (o *ProviderHandler) logout(ctx context.Context, w webhelp.ResponseWriter,
 	return webhelp.Redirect(w, r, redirect_to)
 }
 
+type loginRequired struct {
+	o *ProviderHandler
+	h webhelp.Handler
+}
+
 // LoginRequired is a middleware for redirecting users to a login page if
 // they aren't logged in yet. If you are using a ProviderGroup and don't know
 // which provider a user should use, consider using
 // (*ProviderGroup).LoginRequired instead
 func (o *ProviderHandler) LoginRequired(h webhelp.Handler) webhelp.Handler {
-	return webhelp.HandlerFunc(func(ctx context.Context,
-		w webhelp.ResponseWriter, r *http.Request) error {
-		token, err := o.Token(ctx)
-		if err != nil {
-			return err
-		}
-		if token != nil {
-			return h.HandleHTTP(ctx, w, r)
-		} else {
-			return webhelp.Redirect(w, r, o.LoginURL(r.RequestURI, false))
-		}
-	})
+	return loginRequired{o: o, h: h}
 }
+
+func (lr loginRequired) HandleHTTP(ctx context.Context,
+	w webhelp.ResponseWriter, r *http.Request) error {
+	token, err := lr.o.Token(ctx)
+	if err != nil {
+		return err
+	}
+	if token != nil {
+		return lr.h.HandleHTTP(ctx, w, r)
+	} else {
+		return webhelp.Redirect(w, r, lr.o.LoginURL(r.RequestURI, false))
+	}
+}
+
+func (lr loginRequired) Routes(
+	cb func(method, path string, annotations []string)) {
+	webhelp.Routes(lr.h, cb)
+}
+
+var _ webhelp.Handler = loginRequired{}
+var _ webhelp.RouteLister = loginRequired{}

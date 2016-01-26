@@ -88,6 +88,14 @@ func (g *ProviderGroup) HandleHTTP(ctx context.Context,
 	return g.mux.HandleHTTP(ctx, w, r)
 }
 
+func (g *ProviderGroup) Routes(
+	cb func(method, path string, annotations []string)) {
+	webhelp.Routes(g.mux, cb)
+}
+
+var _ webhelp.Handler = (*ProviderGroup)(nil)
+var _ webhelp.RouteLister = (*ProviderGroup)(nil)
+
 // Handler returns a specific ProviderHandler given the Provider name
 func (g *ProviderGroup) Handler(provider_name string) (rv *ProviderHandler,
 	exists bool) {
