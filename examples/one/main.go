@@ -14,7 +14,6 @@ import (
 	"github.com/jtolds/webhelp"
 	"github.com/jtolds/webhelp-oauth2"
 	"github.com/jtolds/webhelp/sessions"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -31,11 +30,11 @@ type SampleHandler struct {
 	Restricted bool
 }
 
-func (s *SampleHandler) HandleHTTP(ctx context.Context,
-	w webhelp.ResponseWriter, r *http.Request) error {
-	t, err := s.Prov.Token(ctx)
+func (s *SampleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	t, err := s.Prov.Token(r.Context())
 	if err != nil {
-		return err
+		webhelp.HandleError(w, r, err)
+		return
 	}
 	w.Header().Set("Content-Type", "text/html")
 	if s.Restricted {
@@ -55,7 +54,6 @@ func (s *SampleHandler) HandleHTTP(ctx context.Context,
 	    <p><a href="/restricted">Restricted</a></p>
     `)
 	}
-	return nil
 }
 
 func main() {

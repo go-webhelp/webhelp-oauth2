@@ -56,9 +56,9 @@ func NewProviderHandler(provider *Provider, session_namespace string,
 		handler_base_url:  strings.TrimRight(handler_base_url, "/"),
 		urls:              urls}
 	h.DirMux = webhelp.DirMux{
-		"login":  webhelp.Exact(webhelp.HandlerFunc(h.login)),
-		"logout": webhelp.Exact(webhelp.HandlerFunc(h.logout)),
-		"_cb":    webhelp.Exact(webhelp.HandlerFunc(h.cb))}
+		"login":  webhelp.Exact(http.HandlerFunc(h.login)),
+		"logout": webhelp.Exact(http.HandlerFunc(h.logout)),
+		"_cb":    webhelp.Exact(http.HandlerFunc(h.cb))}
 	return h
 }
 
@@ -97,7 +97,7 @@ func (o *ProviderHandler) token(session *sessions.Session) *oauth2.Token {
 // provider. If you're using a ProviderGroup you may be interested in
 // LogoutAll.
 func (o *ProviderHandler) Logout(ctx context.Context,
-	w webhelp.ResponseWriter) error {
+	w http.ResponseWriter) error {
 	session, err := o.Session(ctx)
 	if err != nil {
 		return err
@@ -126,11 +126,11 @@ func (o *ProviderHandler) LogoutURL(redirect_to string) string {
 		"redirect_to": {redirect_to}}.Encode()
 }
 
-func (o *ProviderHandler) login(ctx context.Context, w webhelp.ResponseWriter,
-	r *http.Request) error {
-	session, err := o.Session(ctx)
+func (o *ProviderHandler) login(w http.ResponseWriter, r *http.Request) {
+	session, err := o.Session(r.Context())
 	if err != nil {
-		return err
+		webhelp.HandleError(w, r, err)
+		return
 	}
 
 	redirect_to := r.FormValue("redirect_to")
@@ -144,7 +144,8 @@ func (o *ProviderHandler) login(ctx context.Context, w webhelp.ResponseWriter,
 	}
 
 	if !force_prompt && o.token(session) != nil {
-		return webhelp.Redirect(w, r, redirect_to)
+		webhelp.Redirect(w, r, redirect_to)
+		return
 	}
 
 	state := newState()
@@ -152,7 +153,8 @@ func (o *ProviderHandler) login(ctx context.Context, w webhelp.ResponseWriter,
 	session.Values["_redirect_to"] = redirect_to
 	err = session.Save(w)
 	if err != nil {
-		return err
+		webhelp.HandleError(w, r, err)
+		return
 	}
 
 	opts := []oauth2.AuthCodeOption{oauth2.AccessTypeOnline}
@@ -160,89 +162,82 @@ func (o *ProviderHandler) login(ctx context.Context, w webhelp.ResponseWriter,
 		opts = append(opts, oauth2.ApprovalForce)
 	}
 
-	return webhelp.Redirect(w, r, o.provider.AuthCodeURL(state, opts...))
+	webhelp.Redirect(w, r, o.provider.AuthCodeURL(state, opts...))
 }
 
-func (o *ProviderHandler) cb(ctx context.Context, w webhelp.ResponseWriter,
-	r *http.Request) error {
-	session, err := o.Session(ctx)
+func (o *ProviderHandler) cb(w http.ResponseWriter, r *http.Request) {
+	session, err := o.Session(r.Context())
 	if err != nil {
-		return err
+		webhelp.HandleError(w, r, err)
+		return
 	}
 
 	val, exists := session.Values["_state"]
 	existing_state, correct := val.(string)
 	if !exists || !correct {
-		return webhelp.ErrBadRequest.New("invalid session storage state")
+		webhelp.HandleError(w, r,
+			webhelp.ErrBadRequest.New("invalid session storage state"))
+		return
 	}
 
 	val, exists = session.Values["_redirect_to"]
 	redirect_to, correct := val.(string)
 	if !exists || !correct {
-		return webhelp.ErrBadRequest.New("invalid redirect_to")
+		webhelp.HandleError(w, r,
+			webhelp.ErrBadRequest.New("invalid redirect_to"))
+		return
 	}
 
 	if existing_state != r.FormValue("state") {
-		return webhelp.ErrBadRequest.New("csrf detected")
+		webhelp.HandleError(w, r, webhelp.ErrBadRequest.New("csrf detected"))
+		return
 	}
 
 	token, err := o.provider.Exchange(context.Background(), r.FormValue("code"))
 	if err != nil {
-		return err
+		webhelp.HandleError(w, r, err)
+		return
 	}
 
 	session.Values["_token"] = token
 	err = session.Save(w)
 	if err != nil {
-		return err
+		webhelp.HandleError(w, r, err)
+		return
 	}
 
-	return webhelp.Redirect(w, r, redirect_to)
+	webhelp.Redirect(w, r, redirect_to)
 }
 
-func (o *ProviderHandler) logout(ctx context.Context, w webhelp.ResponseWriter,
-	r *http.Request) error {
-	err := o.Logout(ctx, w)
+func (o *ProviderHandler) logout(w http.ResponseWriter, r *http.Request) {
+	err := o.Logout(r.Context(), w)
 	if err != nil {
-		return err
+		webhelp.HandleError(w, r, err)
+		return
 	}
 	redirect_to := r.FormValue("redirect_to")
 	if redirect_to == "" {
 		redirect_to = o.urls.DefaultLogoutURL
 	}
-	return webhelp.Redirect(w, r, redirect_to)
-}
-
-type loginRequired struct {
-	o *ProviderHandler
-	h webhelp.Handler
+	webhelp.Redirect(w, r, redirect_to)
 }
 
 // LoginRequired is a middleware for redirecting users to a login page if
 // they aren't logged in yet. If you are using a ProviderGroup and don't know
 // which provider a user should use, consider using
 // (*ProviderGroup).LoginRequired instead
-func (o *ProviderHandler) LoginRequired(h webhelp.Handler) webhelp.Handler {
-	return loginRequired{o: o, h: h}
+func (o *ProviderHandler) LoginRequired(h http.Handler) http.Handler {
+	return webhelp.RouteHandlerFunc(h,
+		func(w http.ResponseWriter, r *http.Request) {
+			token, err := o.Token(r.Context())
+			if err != nil {
+				webhelp.HandleError(w, r, err)
+				return
+			}
+			if token == nil {
+				webhelp.Redirect(w, r, o.LoginURL(r.RequestURI, false))
+				return
+			}
+			h.ServeHTTP(w, r)
+		})
 }
-
-func (lr loginRequired) HandleHTTP(ctx context.Context,
-	w webhelp.ResponseWriter, r *http.Request) error {
-	token, err := lr.o.Token(ctx)
-	if err != nil {
-		return err
-	}
-	if token != nil {
-		return lr.h.HandleHTTP(ctx, w, r)
-	} else {
-		return webhelp.Redirect(w, r, lr.o.LoginURL(r.RequestURI, false))
-	}
-}
-
-func (lr loginRequired) Routes(
-	cb func(method, path string, annotations []string)) {
-	webhelp.Routes(lr.h, cb)
-}
-
-var _ webhelp.Handler = loginRequired{}
-var _ webhelp.RouteLister = loginRequired{}

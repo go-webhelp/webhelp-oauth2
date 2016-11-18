@@ -15,7 +15,6 @@ import (
 	"github.com/jtolds/webhelp"
 	"github.com/jtolds/webhelp-oauth2"
 	"github.com/jtolds/webhelp/sessions"
-	"golang.org/x/net/context"
 )
 
 var (
@@ -25,6 +24,8 @@ var (
 
 	githubClientId       = flag.String("github_client_id", "", "")
 	githubClientSecret   = flag.String("github_client_secret", "", "")
+	googleClientId       = flag.String("google_client_id", "", "")
+	googleClientSecret   = flag.String("google_client_secret", "", "")
 	facebookClientId     = flag.String("facebook_client_id", "", "")
 	facebookClientSecret = flag.String("facebook_client_secret", "", "")
 )
@@ -34,11 +35,11 @@ type SampleHandler struct {
 	Restricted bool
 }
 
-func (s *SampleHandler) HandleHTTP(ctx context.Context,
-	w webhelp.ResponseWriter, r *http.Request) error {
-	tokens, err := s.Group.Tokens(ctx)
+func (s *SampleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	tokens, err := s.Group.Tokens(r.Context())
 	if err != nil {
-		return err
+		webhelp.HandleError(w, r, err)
+		return
 	}
 	w.Header().Set("Content-Type", "text/html")
 	if s.Restricted {
@@ -92,15 +93,13 @@ func (s *SampleHandler) HandleHTTP(ctx context.Context,
 	    <p><a href="/restricted">Restricted</a></p>
     `)
 	}
-	return nil
 }
 
 type LoginHandler struct {
 	Group *oauth2.ProviderGroup
 }
 
-func (l *LoginHandler) HandleHTTP(ctx context.Context,
-	w webhelp.ResponseWriter, r *http.Request) error {
+func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html")
 	fmt.Fprintf(w, `<h3>Login required</h3>`)
 	fmt.Fprintf(w, "<p>Log in with:<ul>")
@@ -109,7 +108,6 @@ func (l *LoginHandler) HandleHTTP(ctx context.Context,
 			provider.LoginURL(r.FormValue("redirect_to"), false), name)
 	}
 	fmt.Fprintf(w, "</ul></p>")
-	return nil
 }
 
 func loginurl(redirect_to string) string {
@@ -130,6 +128,9 @@ func main() {
 		oauth2.Github(oauth2.Config{
 			ClientID:     *githubClientId,
 			ClientSecret: *githubClientSecret}),
+		oauth2.Google(oauth2.Config{
+			ClientID:     *googleClientId,
+			ClientSecret: *googleClientSecret}),
 		oauth2.Facebook(oauth2.Config{
 			ClientID:     *facebookClientId,
 			ClientSecret: *facebookClientSecret,
@@ -144,10 +145,10 @@ func main() {
 				webhelp.DirMux{
 					"":      &SampleHandler{Group: group, Restricted: false},
 					"login": &LoginHandler{Group: group},
-					"logout": webhelp.HandlerFunc(func(ctx context.Context,
-						w webhelp.ResponseWriter, r *http.Request) error {
-						return webhelp.Redirect(w, r, "/auth/all/logout")
-					}),
+					"logout": http.HandlerFunc(
+						func(w http.ResponseWriter, r *http.Request) {
+							webhelp.Redirect(w, r, "/auth/all/logout")
+						}),
 					"restricted": group.LoginRequired(
 						&SampleHandler{Group: group, Restricted: true}, loginurl),
 					"auth": group})))
