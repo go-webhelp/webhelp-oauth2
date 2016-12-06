@@ -166,7 +166,8 @@ func (o *ProviderHandler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (o *ProviderHandler) cb(w http.ResponseWriter, r *http.Request) {
-	session, err := o.Session(r.Context())
+	ctx := r.Context()
+	session, err := o.Session(ctx)
 	if err != nil {
 		webhelp.HandleError(w, r, err)
 		return
@@ -193,7 +194,7 @@ func (o *ProviderHandler) cb(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := o.provider.Exchange(context.Background(), r.FormValue("code"))
+	token, err := o.provider.Exchange(ctx, r.FormValue("code"))
 	if err != nil {
 		webhelp.HandleError(w, r, err)
 		return
