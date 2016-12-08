@@ -139,7 +139,7 @@ func (g *ProviderGroup) Tokens(ctx context.Context) (map[string]*oauth2.Token,
 	return rv, errs.Finalize()
 }
 
-// Tokens will return a map of all the currently valid OAuth2 tokens
+// Providers will return a map of all the currently known providers.
 func (g *ProviderGroup) Providers() map[string]*ProviderHandler {
 	copy := make(map[string]*ProviderHandler, len(g.handlers))
 	for name, handler := range g.handlers {
@@ -168,7 +168,7 @@ func (g *ProviderGroup) LogoutAll(ctx context.Context,
 }
 
 func (g *ProviderGroup) logoutAll(w http.ResponseWriter, r *http.Request) {
-	err := g.LogoutAll(r.Context(), w)
+	err := g.LogoutAll(webhelp.Context(r), w)
 	if err != nil {
 		webhelp.HandleError(w, r, err)
 		return
@@ -190,7 +190,7 @@ func (g *ProviderGroup) LoginRequired(h http.Handler,
 	login_redirect func(redirect_to string) (url string)) http.Handler {
 	return webhelp.RouteHandlerFunc(h,
 		func(w http.ResponseWriter, r *http.Request) {
-			tokens, err := g.Tokens(r.Context())
+			tokens, err := g.Tokens(webhelp.Context(r))
 			if err != nil {
 				webhelp.HandleError(w, r, err)
 				return

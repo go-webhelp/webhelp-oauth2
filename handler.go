@@ -127,7 +127,7 @@ func (o *ProviderHandler) LogoutURL(redirect_to string) string {
 }
 
 func (o *ProviderHandler) login(w http.ResponseWriter, r *http.Request) {
-	session, err := o.Session(r.Context())
+	session, err := o.Session(webhelp.Context(r))
 	if err != nil {
 		webhelp.HandleError(w, r, err)
 		return
@@ -166,7 +166,7 @@ func (o *ProviderHandler) login(w http.ResponseWriter, r *http.Request) {
 }
 
 func (o *ProviderHandler) cb(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
+	ctx := webhelp.Context(r)
 	session, err := o.Session(ctx)
 	if err != nil {
 		webhelp.HandleError(w, r, err)
@@ -211,7 +211,7 @@ func (o *ProviderHandler) cb(w http.ResponseWriter, r *http.Request) {
 }
 
 func (o *ProviderHandler) logout(w http.ResponseWriter, r *http.Request) {
-	err := o.Logout(r.Context(), w)
+	err := o.Logout(webhelp.Context(r), w)
 	if err != nil {
 		webhelp.HandleError(w, r, err)
 		return
@@ -230,7 +230,7 @@ func (o *ProviderHandler) logout(w http.ResponseWriter, r *http.Request) {
 func (o *ProviderHandler) LoginRequired(h http.Handler) http.Handler {
 	return webhelp.RouteHandlerFunc(h,
 		func(w http.ResponseWriter, r *http.Request) {
-			token, err := o.Token(r.Context())
+			token, err := o.Token(webhelp.Context(r))
 			if err != nil {
 				webhelp.HandleError(w, r, err)
 				return

@@ -31,7 +31,7 @@ type SampleHandler struct {
 }
 
 func (s *SampleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	t, err := s.Prov.Token(r.Context())
+	t, err := s.Prov.Token(webhelp.Context(r))
 	if err != nil {
 		webhelp.HandleError(w, r, err)
 		return
