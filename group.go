@@ -88,7 +88,7 @@ func (g *ProviderGroup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // Routes implements webhelp.RouteLister
 func (g *ProviderGroup) Routes(
-	cb func(method, path string, annotations []string)) {
+	cb func(method, path string, annotations map[string]string)) {
 	webhelp.Routes(g.mux, cb)
 }
 
