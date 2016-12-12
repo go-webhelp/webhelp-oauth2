@@ -71,6 +71,8 @@ func (o *ProviderHandler) Token(ctx context.Context) (*oauth2.Token, error) {
 	return o.token(session), nil
 }
 
+func (o *ProviderHandler) Provider() *Provider { return o.provider }
+
 // Session returns a provider-specific authenticated session for the current
 // user. This session is cleared whenever a user logs out.
 func (o *ProviderHandler) Session(ctx context.Context) (*sessions.Session,
