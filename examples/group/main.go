@@ -143,7 +143,7 @@ func main() {
 		panic(err)
 	}
 
-	whlog.ListenAndServe(*listenAddr, whlog.LogRequests(
+	whlog.ListenAndServe(*listenAddr, whlog.LogRequests(whlog.Default,
 		whsess.HandlerWithStore(store,
 			whmux.Dir{
 				"":      &SampleHandler{Group: group, Restricted: false},

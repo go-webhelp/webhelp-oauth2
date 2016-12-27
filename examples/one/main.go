@@ -75,7 +75,7 @@ func main() {
 		"oauth-github", "/auth",
 		oauth2.RedirectURLs{})
 
-	whlog.ListenAndServe(*listenAddr, whlog.LogRequests(
+	whlog.ListenAndServe(*listenAddr, whlog.LogRequests(whlog.Default,
 		whsess.HandlerWithStore(store,
 			whmux.Dir{
 				"": &SampleHandler{Prov: oauth, Restricted: false},
