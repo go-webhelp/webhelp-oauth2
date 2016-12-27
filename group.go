@@ -9,7 +9,11 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jtolds/webhelp"
+	"github.com/jtolds/webhelp/whcompat"
+	"github.com/jtolds/webhelp/wherr"
+	"github.com/jtolds/webhelp/whmux"
+	"github.com/jtolds/webhelp/whredir"
+	"github.com/jtolds/webhelp/whroute"
 	"github.com/spacemonkeygo/errors"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
@@ -39,7 +43,7 @@ import (
 // URL generator.
 type ProviderGroup struct {
 	handlers       map[string]*ProviderHandler
-	mux            webhelp.DirMux
+	mux            whmux.Dir
 	urls           RedirectURLs
 	group_base_url string
 }
@@ -58,8 +62,8 @@ func NewProviderGroup(session_namespace string, group_base_url string,
 		urls:           urls,
 		group_base_url: group_base_url}
 
-	g.mux = webhelp.DirMux{
-		"all": webhelp.DirMux{"logout": webhelp.Exact(
+	g.mux = whmux.Dir{
+		"all": whmux.Dir{"logout": whmux.Exact(
 			http.HandlerFunc(g.logoutAll))},
 	}
 
@@ -86,14 +90,14 @@ func (g *ProviderGroup) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	g.mux.ServeHTTP(w, r)
 }
 
-// Routes implements webhelp.RouteLister
+// Routes implements whroute.Lister
 func (g *ProviderGroup) Routes(
 	cb func(method, path string, annotations map[string]string)) {
-	webhelp.Routes(g.mux, cb)
+	whroute.Routes(g.mux, cb)
 }
 
 var _ http.Handler = (*ProviderGroup)(nil)
-var _ webhelp.RouteLister = (*ProviderGroup)(nil)
+var _ whroute.Lister = (*ProviderGroup)(nil)
 
 // Handler returns a specific ProviderHandler given the Provider name
 func (g *ProviderGroup) Handler(provider_name string) (rv *ProviderHandler,
@@ -168,16 +172,16 @@ func (g *ProviderGroup) LogoutAll(ctx context.Context,
 }
 
 func (g *ProviderGroup) logoutAll(w http.ResponseWriter, r *http.Request) {
-	err := g.LogoutAll(webhelp.Context(r), w)
+	err := g.LogoutAll(whcompat.Context(r), w)
 	if err != nil {
-		webhelp.HandleError(w, r, err)
+		wherr.Handle(w, r, err)
 		return
 	}
 	redirect_to := r.FormValue("redirect_to")
 	if redirect_to == "" {
 		redirect_to = g.urls.DefaultLogoutURL
 	}
-	webhelp.Redirect(w, r, redirect_to)
+	whredir.Redirect(w, r, redirect_to)
 }
 
 // LoginRequired is a middleware for redirecting users to a login page if
@@ -188,15 +192,15 @@ func (g *ProviderGroup) logoutAll(w http.ResponseWriter, r *http.Request) {
 // login_redirect URL.
 func (g *ProviderGroup) LoginRequired(h http.Handler,
 	login_redirect func(redirect_to string) (url string)) http.Handler {
-	return webhelp.RouteHandlerFunc(h,
+	return whroute.HandlerFunc(h,
 		func(w http.ResponseWriter, r *http.Request) {
-			tokens, err := g.Tokens(webhelp.Context(r))
+			tokens, err := g.Tokens(whcompat.Context(r))
 			if err != nil {
-				webhelp.HandleError(w, r, err)
+				wherr.Handle(w, r, err)
 				return
 			}
 			if len(tokens) <= 0 {
-				webhelp.Redirect(w, r, login_redirect(r.RequestURI))
+				whredir.Redirect(w, r, login_redirect(r.RequestURI))
 				return
 			}
 			h.ServeHTTP(w, r)

@@ -12,9 +12,13 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/jtolds/webhelp"
 	"github.com/jtolds/webhelp-oauth2"
-	"github.com/jtolds/webhelp/sessions"
+	"github.com/jtolds/webhelp/whcompat"
+	"github.com/jtolds/webhelp/wherr"
+	"github.com/jtolds/webhelp/whlog"
+	"github.com/jtolds/webhelp/whmux"
+	"github.com/jtolds/webhelp/whredir"
+	"github.com/jtolds/webhelp/whsess"
 )
 
 var (
@@ -36,9 +40,9 @@ type SampleHandler struct {
 }
 
 func (s *SampleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	tokens, err := s.Group.Tokens(webhelp.Context(r))
+	tokens, err := s.Group.Tokens(whcompat.Context(r))
 	if err != nil {
-		webhelp.HandleError(w, r, err)
+		wherr.Handle(w, r, err)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html")
@@ -121,7 +125,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	store := sessions.NewCookieStore(secret)
+	store := whsess.NewCookieStore(secret)
 
 	group, err := oauth2.NewProviderGroup(
 		"oauth", "/auth", oauth2.RedirectURLs{},
@@ -139,17 +143,16 @@ func main() {
 		panic(err)
 	}
 
-	webhelp.ListenAndServe(*listenAddr,
-		webhelp.LoggingHandler(
-			sessions.HandlerWithStore(store,
-				webhelp.DirMux{
-					"":      &SampleHandler{Group: group, Restricted: false},
-					"login": &LoginHandler{Group: group},
-					"logout": http.HandlerFunc(
-						func(w http.ResponseWriter, r *http.Request) {
-							webhelp.Redirect(w, r, "/auth/all/logout")
-						}),
-					"restricted": group.LoginRequired(
-						&SampleHandler{Group: group, Restricted: true}, loginurl),
-					"auth": group})))
+	whlog.ListenAndServe(*listenAddr, whlog.LogRequests(
+		whsess.HandlerWithStore(store,
+			whmux.Dir{
+				"":      &SampleHandler{Group: group, Restricted: false},
+				"login": &LoginHandler{Group: group},
+				"logout": http.HandlerFunc(
+					func(w http.ResponseWriter, r *http.Request) {
+						whredir.Redirect(w, r, "/auth/all/logout")
+					}),
+				"restricted": group.LoginRequired(
+					&SampleHandler{Group: group, Restricted: true}, loginurl),
+				"auth": group})))
 }

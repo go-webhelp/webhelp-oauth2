@@ -11,8 +11,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jtolds/webhelp"
-	"github.com/jtolds/webhelp/sessions"
+	"github.com/jtolds/webhelp/whcompat"
+	"github.com/jtolds/webhelp/wherr"
+	"github.com/jtolds/webhelp/whmux"
+	"github.com/jtolds/webhelp/whredir"
+	"github.com/jtolds/webhelp/whroute"
+	"github.com/jtolds/webhelp/whsess"
 	"golang.org/x/net/context"
 	"golang.org/x/oauth2"
 )
@@ -21,7 +25,7 @@ func init() {
 	gob.Register(&oauth2.Token{})
 }
 
-// ProviderHandler is a webhelp.Handler that keeps track of authentication for
+// ProviderHandler is an http.Handler that keeps track of authentication for
 // a single OAuth2 provider
 //
 // ProviderHandler handles requests to the following paths:
@@ -36,7 +40,7 @@ type ProviderHandler struct {
 	session_namespace string
 	handler_base_url  string
 	urls              RedirectURLs
-	webhelp.DirMux
+	whmux.Dir
 }
 
 // NewProviderHandler makes a provider handler. Requires a provider
@@ -55,10 +59,10 @@ func NewProviderHandler(provider *Provider, session_namespace string,
 		session_namespace: session_namespace,
 		handler_base_url:  strings.TrimRight(handler_base_url, "/"),
 		urls:              urls}
-	h.DirMux = webhelp.DirMux{
-		"login":  webhelp.Exact(http.HandlerFunc(h.login)),
-		"logout": webhelp.Exact(http.HandlerFunc(h.logout)),
-		"_cb":    webhelp.Exact(http.HandlerFunc(h.cb))}
+	h.Dir = whmux.Dir{
+		"login":  whmux.Exact(http.HandlerFunc(h.login)),
+		"logout": whmux.Exact(http.HandlerFunc(h.logout)),
+		"_cb":    whmux.Exact(http.HandlerFunc(h.cb))}
 	return h
 }
 
@@ -75,9 +79,9 @@ func (o *ProviderHandler) Provider() *Provider { return o.provider }
 
 // Session returns a provider-specific authenticated session for the current
 // user. This session is cleared whenever a user logs out.
-func (o *ProviderHandler) Session(ctx context.Context) (*sessions.Session,
+func (o *ProviderHandler) Session(ctx context.Context) (*whsess.Session,
 	error) {
-	return sessions.Load(ctx, o.session_namespace)
+	return whsess.Load(ctx, o.session_namespace)
 }
 
 // LoggedIn returns true if the user is logged in with this provider
@@ -86,7 +90,7 @@ func (o *ProviderHandler) LoggedIn(ctx context.Context) (bool, error) {
 	return t != nil, err
 }
 
-func (o *ProviderHandler) token(session *sessions.Session) *oauth2.Token {
+func (o *ProviderHandler) token(session *whsess.Session) *oauth2.Token {
 	val, exists := session.Values["_token"]
 	token, correct := val.(*oauth2.Token)
 	if exists && correct && token.Valid() {
@@ -129,9 +133,9 @@ func (o *ProviderHandler) LogoutURL(redirect_to string) string {
 }
 
 func (o *ProviderHandler) login(w http.ResponseWriter, r *http.Request) {
-	session, err := o.Session(webhelp.Context(r))
+	session, err := o.Session(whcompat.Context(r))
 	if err != nil {
-		webhelp.HandleError(w, r, err)
+		wherr.Handle(w, r, err)
 		return
 	}
 
@@ -146,7 +150,7 @@ func (o *ProviderHandler) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !force_prompt && o.token(session) != nil {
-		webhelp.Redirect(w, r, redirect_to)
+		whredir.Redirect(w, r, redirect_to)
 		return
 	}
 
@@ -155,7 +159,7 @@ func (o *ProviderHandler) login(w http.ResponseWriter, r *http.Request) {
 	session.Values["_redirect_to"] = redirect_to
 	err = session.Save(w)
 	if err != nil {
-		webhelp.HandleError(w, r, err)
+		wherr.Handle(w, r, err)
 		return
 	}
 
@@ -164,65 +168,65 @@ func (o *ProviderHandler) login(w http.ResponseWriter, r *http.Request) {
 		opts = append(opts, oauth2.ApprovalForce)
 	}
 
-	webhelp.Redirect(w, r, o.provider.AuthCodeURL(state, opts...))
+	whredir.Redirect(w, r, o.provider.AuthCodeURL(state, opts...))
 }
 
 func (o *ProviderHandler) cb(w http.ResponseWriter, r *http.Request) {
-	ctx := webhelp.Context(r)
+	ctx := whcompat.Context(r)
 	session, err := o.Session(ctx)
 	if err != nil {
-		webhelp.HandleError(w, r, err)
+		wherr.Handle(w, r, err)
 		return
 	}
 
 	val, exists := session.Values["_state"]
 	existing_state, correct := val.(string)
 	if !exists || !correct {
-		webhelp.HandleError(w, r,
-			webhelp.ErrBadRequest.New("invalid session storage state"))
+		wherr.Handle(w, r,
+			wherr.BadRequest.New("invalid session storage state"))
 		return
 	}
 
 	val, exists = session.Values["_redirect_to"]
 	redirect_to, correct := val.(string)
 	if !exists || !correct {
-		webhelp.HandleError(w, r,
-			webhelp.ErrBadRequest.New("invalid redirect_to"))
+		wherr.Handle(w, r,
+			wherr.BadRequest.New("invalid redirect_to"))
 		return
 	}
 
 	if existing_state != r.FormValue("state") {
-		webhelp.HandleError(w, r, webhelp.ErrBadRequest.New("csrf detected"))
+		wherr.Handle(w, r, wherr.BadRequest.New("csrf detected"))
 		return
 	}
 
 	token, err := o.provider.Exchange(ctx, r.FormValue("code"))
 	if err != nil {
-		webhelp.HandleError(w, r, err)
+		wherr.Handle(w, r, err)
 		return
 	}
 
 	session.Values["_token"] = token
 	err = session.Save(w)
 	if err != nil {
-		webhelp.HandleError(w, r, err)
+		wherr.Handle(w, r, err)
 		return
 	}
 
-	webhelp.Redirect(w, r, redirect_to)
+	whredir.Redirect(w, r, redirect_to)
 }
 
 func (o *ProviderHandler) logout(w http.ResponseWriter, r *http.Request) {
-	err := o.Logout(webhelp.Context(r), w)
+	err := o.Logout(whcompat.Context(r), w)
 	if err != nil {
-		webhelp.HandleError(w, r, err)
+		wherr.Handle(w, r, err)
 		return
 	}
 	redirect_to := r.FormValue("redirect_to")
 	if redirect_to == "" {
 		redirect_to = o.urls.DefaultLogoutURL
 	}
-	webhelp.Redirect(w, r, redirect_to)
+	whredir.Redirect(w, r, redirect_to)
 }
 
 // LoginRequired is a middleware for redirecting users to a login page if
@@ -230,15 +234,15 @@ func (o *ProviderHandler) logout(w http.ResponseWriter, r *http.Request) {
 // which provider a user should use, consider using
 // (*ProviderGroup).LoginRequired instead
 func (o *ProviderHandler) LoginRequired(h http.Handler) http.Handler {
-	return webhelp.RouteHandlerFunc(h,
+	return whroute.HandlerFunc(h,
 		func(w http.ResponseWriter, r *http.Request) {
-			token, err := o.Token(webhelp.Context(r))
+			token, err := o.Token(whcompat.Context(r))
 			if err != nil {
-				webhelp.HandleError(w, r, err)
+				wherr.Handle(w, r, err)
 				return
 			}
 			if token == nil {
-				webhelp.Redirect(w, r, o.LoginURL(r.RequestURI, false))
+				whredir.Redirect(w, r, o.LoginURL(r.RequestURI, false))
 				return
 			}
 			h.ServeHTTP(w, r)

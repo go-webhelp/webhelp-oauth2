@@ -11,9 +11,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/jtolds/webhelp"
 	"github.com/jtolds/webhelp-oauth2"
-	"github.com/jtolds/webhelp/sessions"
+	"github.com/jtolds/webhelp/whcompat"
+	"github.com/jtolds/webhelp/wherr"
+	"github.com/jtolds/webhelp/whlog"
+	"github.com/jtolds/webhelp/whmux"
+	"github.com/jtolds/webhelp/whsess"
 )
 
 var (
@@ -31,9 +34,9 @@ type SampleHandler struct {
 }
 
 func (s *SampleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	t, err := s.Prov.Token(webhelp.Context(r))
+	t, err := s.Prov.Token(whcompat.Context(r))
 	if err != nil {
-		webhelp.HandleError(w, r, err)
+		wherr.Handle(w, r, err)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html")
@@ -63,7 +66,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	store := sessions.NewCookieStore(secret)
+	store := whsess.NewCookieStore(secret)
 
 	oauth := oauth2.NewProviderHandler(
 		oauth2.Github(oauth2.Config{
@@ -72,12 +75,11 @@ func main() {
 		"oauth-github", "/auth",
 		oauth2.RedirectURLs{})
 
-	webhelp.ListenAndServe(*listenAddr,
-		webhelp.LoggingHandler(
-			sessions.HandlerWithStore(store,
-				webhelp.DirMux{
-					"": &SampleHandler{Prov: oauth, Restricted: false},
-					"restricted": oauth.LoginRequired(
-						&SampleHandler{Prov: oauth, Restricted: true}),
-					"auth": oauth})))
+	whlog.ListenAndServe(*listenAddr, whlog.LogRequests(
+		whsess.HandlerWithStore(store,
+			whmux.Dir{
+				"": &SampleHandler{Prov: oauth, Restricted: false},
+				"restricted": oauth.LoginRequired(
+					&SampleHandler{Prov: oauth, Restricted: true}),
+				"auth": oauth})))
 }
