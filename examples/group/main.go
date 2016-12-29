@@ -12,7 +12,7 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/jtolds/webhelp-oauth2"
+	"gopkg.in/go-webhelp/whoauth2.v1"
 	"gopkg.in/webhelp.v1/whcompat"
 	"gopkg.in/webhelp.v1/wherr"
 	"gopkg.in/webhelp.v1/whlog"
@@ -35,7 +35,7 @@ var (
 )
 
 type SampleHandler struct {
-	Group      *oauth2.ProviderGroup
+	Group      *whoauth2.ProviderGroup
 	Restricted bool
 }
 
@@ -100,7 +100,7 @@ func (s *SampleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 type LoginHandler struct {
-	Group *oauth2.ProviderGroup
+	Group *whoauth2.ProviderGroup
 }
 
 func (l *LoginHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -127,15 +127,15 @@ func main() {
 	}
 	store := whsess.NewCookieStore(secret)
 
-	group, err := oauth2.NewProviderGroup(
-		"oauth", "/auth", oauth2.RedirectURLs{},
-		oauth2.Github(oauth2.Config{
+	group, err := whoauth2.NewProviderGroup(
+		"oauth", "/auth", whoauth2.RedirectURLs{},
+		whoauth2.Github(whoauth2.Config{
 			ClientID:     *githubClientId,
 			ClientSecret: *githubClientSecret}),
-		oauth2.Google(oauth2.Config{
+		whoauth2.Google(whoauth2.Config{
 			ClientID:     *googleClientId,
 			ClientSecret: *googleClientSecret}),
-		oauth2.Facebook(oauth2.Config{
+		whoauth2.Facebook(whoauth2.Config{
 			ClientID:     *facebookClientId,
 			ClientSecret: *facebookClientSecret,
 			RedirectURL:  "http://localhost:8080/auth/facebook/_cb"}))

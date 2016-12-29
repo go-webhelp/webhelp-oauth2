@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/jtolds/webhelp-oauth2"
+	"gopkg.in/go-webhelp/whoauth2.v1"
 	"gopkg.in/webhelp.v1/whcompat"
 	"gopkg.in/webhelp.v1/wherr"
 	"gopkg.in/webhelp.v1/whlog"
@@ -29,7 +29,7 @@ var (
 )
 
 type SampleHandler struct {
-	Prov       *oauth2.ProviderHandler
+	Prov       *whoauth2.ProviderHandler
 	Restricted bool
 }
 
@@ -68,12 +68,12 @@ func main() {
 	}
 	store := whsess.NewCookieStore(secret)
 
-	oauth := oauth2.NewProviderHandler(
-		oauth2.Github(oauth2.Config{
+	oauth := whoauth2.NewProviderHandler(
+		whoauth2.Github(whoauth2.Config{
 			ClientID:     *githubClientId,
 			ClientSecret: *githubClientSecret}),
 		"oauth-github", "/auth",
-		oauth2.RedirectURLs{})
+		whoauth2.RedirectURLs{})
 
 	whlog.ListenAndServe(*listenAddr, whlog.LogRequests(whlog.Default,
 		whsess.HandlerWithStore(store,

@@ -1,7 +1,7 @@
 // Copyright (C) 2014 JT Olds
 // See LICENSE for copying information
 
-package oauth2
+package whoauth2
 
 import (
 	"fmt"
@@ -9,14 +9,14 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/spacemonkeygo/errors"
+	"golang.org/x/net/context"
+	"golang.org/x/oauth2"
 	"gopkg.in/webhelp.v1/whcompat"
 	"gopkg.in/webhelp.v1/wherr"
 	"gopkg.in/webhelp.v1/whmux"
 	"gopkg.in/webhelp.v1/whredir"
 	"gopkg.in/webhelp.v1/whroute"
-	"github.com/spacemonkeygo/errors"
-	"golang.org/x/net/context"
-	"golang.org/x/oauth2"
 )
 
 // ProviderGroup is an http.Handler that keeps track of authentication for

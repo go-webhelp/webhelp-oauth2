@@ -1,7 +1,7 @@
 // Copyright (C) 2014 JT Olds
 // See LICENSE for copying information
 
-package oauth2
+package whoauth2
 
 import (
 	"crypto/rand"
