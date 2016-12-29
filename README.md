@@ -1,4 +1,4 @@
-webhelp-oauth2
+whoauth2
 =============
 
 Go library for easily adding required oauth2 resources to a
