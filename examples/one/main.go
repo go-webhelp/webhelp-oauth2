@@ -12,11 +12,11 @@ import (
 	"net/http"
 
 	"github.com/jtolds/webhelp-oauth2"
-	"github.com/jtolds/webhelp/whcompat"
-	"github.com/jtolds/webhelp/wherr"
-	"github.com/jtolds/webhelp/whlog"
-	"github.com/jtolds/webhelp/whmux"
-	"github.com/jtolds/webhelp/whsess"
+	"gopkg.in/webhelp.v1/whcompat"
+	"gopkg.in/webhelp.v1/wherr"
+	"gopkg.in/webhelp.v1/whlog"
+	"gopkg.in/webhelp.v1/whmux"
+	"gopkg.in/webhelp.v1/whsess"
 )
 
 var (
