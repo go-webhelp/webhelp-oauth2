@@ -108,10 +108,7 @@ func (o *ProviderHandler) Logout(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	for name := range session.Values {
-		delete(session.Values, name)
-	}
-	return session.Save(w)
+	return session.Clear(ctx, w)
 }
 
 // LoginURL returns the login URL for this provider
@@ -133,7 +130,8 @@ func (o *ProviderHandler) LogoutURL(redirect_to string) string {
 }
 
 func (o *ProviderHandler) login(w http.ResponseWriter, r *http.Request) {
-	session, err := o.Session(whcompat.Context(r))
+	ctx := whcompat.Context(r)
+	session, err := o.Session(ctx)
 	if err != nil {
 		wherr.Handle(w, r, err)
 		return
@@ -157,7 +155,7 @@ func (o *ProviderHandler) login(w http.ResponseWriter, r *http.Request) {
 	state := newState()
 	session.Values["_state"] = state
 	session.Values["_redirect_to"] = redirect_to
-	err = session.Save(w)
+	err = session.Save(ctx, w)
 	if err != nil {
 		wherr.Handle(w, r, err)
 		return
@@ -207,7 +205,7 @@ func (o *ProviderHandler) cb(w http.ResponseWriter, r *http.Request) {
 	}
 
 	session.Values["_token"] = token
-	err = session.Save(w)
+	err = session.Save(ctx, w)
 	if err != nil {
 		wherr.Handle(w, r, err)
 		return
