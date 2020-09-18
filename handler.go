@@ -40,6 +40,7 @@ type ProviderHandler struct {
 	session_namespace string
 	handler_base_url  string
 	urls              RedirectURLs
+	accessOffline     bool
 	whmux.Dir
 }
 
@@ -64,6 +65,12 @@ func NewProviderHandler(provider *Provider, session_namespace string,
 		"logout": whmux.Exact(http.HandlerFunc(h.logout)),
 		"_cb":    whmux.Exact(http.HandlerFunc(h.cb))}
 	return h
+}
+
+// RequestOfflineTokens tells the provider to request oauth2 tokens with
+// AccessTypeOffline instead of AccessTypeOnline.
+func (o *ProviderHandler) RequestOfflineTokens() {
+	o.accessOffline = true
 }
 
 // Token returns a token if the provider is currently logged in, or nil if not.
@@ -161,7 +168,12 @@ func (o *ProviderHandler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	opts := []oauth2.AuthCodeOption{oauth2.AccessTypeOnline}
+	opts := make([]oauth2.AuthCodeOption, 0, 2)
+	if o.accessOffline {
+		opts = append(opts, oauth2.AccessTypeOffline)
+	} else {
+		opts = append(opts, oauth2.AccessTypeOnline)
+	}
 	if force_prompt {
 		opts = append(opts, oauth2.ApprovalForce)
 	}
