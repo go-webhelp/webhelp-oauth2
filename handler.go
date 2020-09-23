@@ -246,11 +246,7 @@ func (o *ProviderHandler) logout(w http.ResponseWriter, r *http.Request) {
 	whredir.Redirect(w, r, redirect_to)
 }
 
-// LoginRequired is a middleware for redirecting users to a login page if
-// they aren't logged in yet. If you are using a ProviderGroup and don't know
-// which provider a user should use, consider using
-// (*ProviderGroup).LoginRequired instead
-func (o *ProviderHandler) LoginRequired(h http.Handler) http.Handler {
+func (o *ProviderHandler) loginRequired(h http.Handler, forcePrompt bool) http.Handler {
 	return whroute.HandlerFunc(h,
 		func(w http.ResponseWriter, r *http.Request) {
 			token, err := o.Token(whcompat.Context(r))
@@ -259,9 +255,25 @@ func (o *ProviderHandler) LoginRequired(h http.Handler) http.Handler {
 				return
 			}
 			if token == nil {
-				whredir.Redirect(w, r, o.LoginURL(r.RequestURI, false))
+				whredir.Redirect(w, r, o.LoginURL(r.RequestURI, forcePrompt))
 				return
 			}
 			h.ServeHTTP(w, r)
 		})
+}
+
+// LoginRequired is a middleware for redirecting users to a login page if
+// they aren't logged in yet. If you are using a ProviderGroup and don't know
+// which provider a user should use, consider using
+// (*ProviderGroup).LoginRequired instead
+func (o *ProviderHandler) LoginRequired(h http.Handler) http.Handler {
+	return o.loginRequired(h, false)
+}
+
+// LoginRequiredForcePrompt is a middleware for redirecting users to a login page if
+// they aren't logged in yet. If you are using a ProviderGroup and don't know
+// which provider a user should use, consider using
+// (*ProviderGroup).LoginRequired instead.
+func (o *ProviderHandler) LoginRequiredForcePrompt(h http.Handler) http.Handler {
+	return o.loginRequired(h, true)
 }
