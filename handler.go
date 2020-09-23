@@ -210,7 +210,14 @@ func (o *ProviderHandler) cb(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := o.provider.Exchange(ctx, r.FormValue("code"))
+	var accessType oauth2.AuthCodeOption
+	if o.accessOffline {
+		accessType = oauth2.AccessTypeOffline
+	} else {
+		accessType = oauth2.AccessTypeOnline
+	}
+
+	token, err := o.provider.Exchange(ctx, r.FormValue("code"), accessType)
 	if err != nil {
 		wherr.Handle(w, r, err)
 		return
